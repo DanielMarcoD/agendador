@@ -1,0 +1,11 @@
+@import "../styles/theme.scss";
+
+:root {
+  --container-max: 420px;
+}
+.auth-min-h {
+  min-height: calc(100vh - 64px);
+}
+.auth-card {
+  max-width: var(--container-max);
+}
