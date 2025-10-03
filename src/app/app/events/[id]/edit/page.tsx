@@ -6,15 +6,19 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter, useParams } from 'next/navigation'
 import { useToast } from '../../../../../components/ToastProvider'
-import { getEvent, updateEvent, EventDTO } from '../../../../../lib/eventsApi'
+import { getEvent, updateEvent, EventDTO, getEventRecurrenceInfo, RecurrenceType } from '../../../../../lib/eventsApi'
 import { getCategoryLabel } from '../../../../../lib/dateUtils'
+import RecurrenceSelect from '../../../../../components/RecurrenceSelect'
+import RecurrenceBadge from '../../../../../components/RecurrenceBadge'
+import { canEditEvent } from '../../../../../lib/eventPermissions'
 
 const formSchema = z.object({
   title: z.string().min(1, 'Título obrigatório'),
   category: z.string().min(1, 'Categoria é obrigatória'),
   startsAt: z.date(),
   endsAt: z.date(),
-  description: z.string().optional()
+  description: z.string().optional(),
+  recurrence: z.enum(['NONE', 'DAILY', 'WEEKLY', 'MONTHLY']).optional()
 }).refine((data) => data.endsAt.getTime() > data.startsAt.getTime(), {
   message: 'Data de fim deve ser posterior à data de início',
   path: ['endsAt']
@@ -27,6 +31,9 @@ export default function EditEventPage() {
   const params = useParams()
   const toast = useToast()
   const [loading, setLoading] = useState(true)
+  const [recurrenceInfo, setRecurrenceInfo] = useState<any>(null)
+  const [updateSeries, setUpdateSeries] = useState(false)
+  const [currentEvent, setCurrentEvent] = useState<EventDTO | null>(null)
   
   const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(formSchema)
@@ -36,7 +43,24 @@ export default function EditEventPage() {
     async function loadEvent() {
       try {
         setLoading(true)
-        const event = await getEvent(params.id as string)
+        const [event, recurrenceData] = await Promise.all([
+          getEvent(params.id as string),
+          getEventRecurrenceInfo(params.id as string)
+        ])
+        
+        setCurrentEvent(event)
+        setRecurrenceInfo(recurrenceData)
+        
+        // Verificar se o usuário tem permissão para editar
+        if (!canEditEvent(event)) {
+          toast.show({
+            type: 'danger',
+            title: 'Acesso negado',
+            message: 'Você não tem permissão para editar este evento'
+          })
+          router.push('/app/events')
+          return
+        }
         
         // Converter datas para o formato datetime-local
         const startDate = new Date(event.startsAt)
@@ -47,7 +71,8 @@ export default function EditEventPage() {
           category: event.category,
           startsAt: startDate,
           endsAt: endDate,
-          description: event.description || ''
+          description: event.description || '',
+          recurrence: event.recurrence || 'NONE'
         })
       } catch (error) {
         toast.show({ 
@@ -73,13 +98,14 @@ export default function EditEventPage() {
         description: data.description,
         category: data.category as any,
         startsAt: data.startsAt.toISOString(),
-        endsAt: data.endsAt.toISOString()
-      })
+        endsAt: data.endsAt.toISOString(),
+        recurrence: data.recurrence
+      }, updateSeries)
       
       toast.show({ 
         type: 'success', 
         title: 'Sucesso', 
-        message: 'Evento atualizado com sucesso' 
+        message: `Evento${updateSeries ? ' e série' : ''} atualizado com sucesso` 
       })
       
       router.push('/app/events')
@@ -220,6 +246,65 @@ export default function EditEventPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Informações sobre recorrência */}
+                {recurrenceInfo?.isRecurring && (
+                  <div className="alert alert-info">
+                    <div className="d-flex align-items-center gap-2 mb-2">
+                      <i className="fas fa-info-circle"></i>
+                      <strong>Evento Recorrente</strong>
+                      <RecurrenceBadge 
+                        recurrence={currentEvent?.recurrence || 'NONE'} 
+                        isParent={recurrenceInfo.isParent}
+                        seriesCount={recurrenceInfo.seriesCount}
+                      />
+                    </div>
+                    <p className="mb-2">
+                      {recurrenceInfo.isParent 
+                        ? `Este é o evento principal de uma série com ${recurrenceInfo.seriesCount} eventos.`
+                        : `Este evento faz parte de uma série recorrente com ${recurrenceInfo.seriesCount} eventos.`
+                      }
+                    </p>
+                    {recurrenceInfo.isParent && (
+                      <div className="form-check">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id="updateSeries"
+                          checked={updateSeries}
+                          onChange={(e) => setUpdateSeries(e.target.checked)}
+                        />
+                        <label className="form-check-label" htmlFor="updateSeries">
+                          Aplicar mudanças a toda a série recorrente
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Campo de recorrência - apenas para eventos principais */}
+                {(!recurrenceInfo?.isRecurring || recurrenceInfo?.isParent) && (
+                  <div>
+                    <label className="form-label">Repetição</label>
+                    <Controller
+                      name="recurrence"
+                      control={control}
+                      render={({ field }) => (
+                        <RecurrenceSelect
+                          value={field.value || 'NONE'}
+                          onChange={field.onChange}
+                          error={errors.recurrence?.message}
+                        />
+                      )}
+                    />
+                    {recurrenceInfo?.isParent && (
+                      <small className="text-warning">
+                        <i className="fas fa-exclamation-triangle me-1"></i>
+                        Alterar a recorrência não afetará eventos já criados da série.
+                      </small>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="form-label">Descrição</label>

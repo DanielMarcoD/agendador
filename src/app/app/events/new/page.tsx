@@ -6,16 +6,19 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ToastProvider'
-import { createEvent, getCategories } from '@/lib/eventsApi'
+import { createEvent, getCategories, RecurrenceType, ParticipantRole, User } from '@/lib/eventsApi'
 import DateTimePicker from '@/components/DateTimePicker'
 import CategorySelect from '@/components/CategorySelect'
+import RecurrenceSelect from '@/components/RecurrenceSelect'
+import UserSelect from '@/components/UserSelect'
 
 const formSchema = z.object({
   title: z.string().min(1, 'Título é obrigatório'),
   description: z.string().optional(),
   category: z.string().min(1, 'Categoria é obrigatória'),
   startsAt: z.date(),
-  endsAt: z.date()
+  endsAt: z.date(),
+  recurrence: z.enum(['NONE', 'DAILY', 'WEEKLY', 'MONTHLY']).optional()
 }).refine((d) => d.endsAt.getTime() > d.startsAt.getTime(), { 
   message: 'A data de fim deve ser posterior à data de início', 
   path: ['endsAt'] 
@@ -26,6 +29,7 @@ type FormData = z.infer<typeof formSchema>
 export default function NewEventPage() {
   const [categories, setCategories] = useState<string[]>([])
   const [loadingCategories, setLoadingCategories] = useState(true)
+  const [selectedUsers, setSelectedUsers] = useState<Array<{ user: User; role: ParticipantRole }>>([])
   const toast = useToast()
   const router = useRouter()
 
@@ -44,7 +48,8 @@ export default function NewEventPage() {
         now.setMinutes(0, 0, 0)
         now.setHours(now.getHours() + 2)
         return now
-      })()
+      })(),
+      recurrence: 'NONE'
     }
   })
 
@@ -66,6 +71,24 @@ export default function NewEventPage() {
     loadCategories()
   }, [toast])
 
+  const handleUserAdd = (user: User, role: ParticipantRole) => {
+    setSelectedUsers(prev => [...prev, { user, role }])
+  }
+
+  const handleUserRemove = (userId: string) => {
+    setSelectedUsers(prev => prev.filter(item => item.user.id !== userId))
+  }
+
+  const handleRoleChange = (userId: string, role: ParticipantRole) => {
+    setSelectedUsers(prev => 
+      prev.map(item => 
+        item.user.id === userId 
+          ? { ...item, role }
+          : item
+      )
+    )
+  }
+
   async function onCreate(data: FormData) {
     try {
       await createEvent({
@@ -73,7 +96,12 @@ export default function NewEventPage() {
         description: data.description,
         category: data.category as any,
         startsAt: data.startsAt.toISOString(),
-        endsAt: data.endsAt.toISOString()
+        endsAt: data.endsAt.toISOString(),
+        recurrence: data.recurrence || 'NONE',
+        participants: selectedUsers.map(({ user, role }) => ({
+          userId: user.id,
+          role
+        }))
       })
       
       toast.show({ 
@@ -213,6 +241,28 @@ export default function NewEventPage() {
                   {...register('description')} 
                 />
               </div>
+
+              <div>
+                <label className="form-label">Repetição</label>
+                <Controller
+                  name="recurrence"
+                  control={control}
+                  render={({ field }) => (
+                    <RecurrenceSelect
+                      value={field.value || 'NONE'}
+                      onChange={field.onChange}
+                      error={errors.recurrence?.message}
+                    />
+                  )}
+                />
+              </div>
+
+              <UserSelect
+                selectedUsers={selectedUsers}
+                onUserAdd={handleUserAdd}
+                onUserRemove={handleUserRemove}
+                onRoleChange={handleRoleChange}
+              />
 
               <div className="d-flex gap-2 pt-2">
                 <button 

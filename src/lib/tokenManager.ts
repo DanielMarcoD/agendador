@@ -78,3 +78,16 @@ export function startTokenManager() {
 
   return () => clearInterval(interval)
 }
+
+// Função para obter o ID do usuário atual do token
+export function getCurrentUserId(): string | null {
+  try {
+    const token = getToken()
+    if (!token) return null
+    
+    const payload = decodeJWT(token)
+    return payload?.sub || null
+  } catch (error) {
+    return null
+  }
+}

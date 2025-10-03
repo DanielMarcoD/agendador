@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { listEvents, EventDTO } from '@/lib/eventsApi'
 import { getDateRanges, formatEventDateTime, getCategoryLabel, getCategoryColor } from '@/lib/dateUtils'
 import { useToast } from '@/components/ToastProvider'
+import { canEditEvent, canDeleteEvent, getUserRoleInEvent } from '@/lib/eventPermissions'
 
 // Funções para organizar eventos por dia
 function getWeekDays(startDate: Date) {
@@ -294,8 +295,26 @@ export default function AppPage() {
                           </button>
                           <ul className="dropdown-menu">
                             <li><a className="dropdown-item" href={`/app/events/${event.id}`}>Ver detalhes</a></li>
-                            <li><hr className="dropdown-divider" /></li>
-                            <li><button className="dropdown-item text-danger">Excluir</button></li>
+                            {canEditEvent(event) && (
+                              <>
+                                <li><hr className="dropdown-divider" /></li>
+                                <li><a className="dropdown-item" href={`/app/events/${event.id}/edit`}>Editar</a></li>
+                              </>
+                            )}
+                            {canDeleteEvent(event) && (
+                              <>
+                                <li><hr className="dropdown-divider" /></li>
+                                <li><button className="dropdown-item text-danger">Excluir</button></li>
+                              </>
+                            )}
+                            {getUserRoleInEvent(event) !== 'OWNER' && (
+                              <>
+                                <li><hr className="dropdown-divider" /></li>
+                                <li className="dropdown-item-text text-muted small">
+                                  {getUserRoleInEvent(event) === 'EDITOR' ? 'Você é Editor' : 'Apenas Visualização'}
+                                </li>
+                              </>
+                            )}
                           </ul>
                         </div>
                       </div>

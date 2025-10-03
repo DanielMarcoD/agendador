@@ -1,10 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ToastProvider'
-import { deleteEvent, listEvents, EventDTO } from '@/lib/eventsApi'
+import { deleteEvent, listEvents, EventDTO, getEventRecurrenceInfo } from '@/lib/eventsApi'
 import { getCategoryLabel, getCategoryColor } from '@/lib/dateUtils'
 import CategorySelect, { categories as categoryOptions } from '@/components/CategorySelect'
+import DeleteEventModal from '@/components/DeleteEventModal'
+import RecurrenceBadge from '@/components/RecurrenceBadge'
+import { parseVirtualEventId, isEventVirtual } from '@/lib/virtualEvents'
+import { canEditEvent, canDeleteEvent, getUserRoleInEvent } from '@/lib/eventPermissions'
 
 function defaultRanges() {
   // Retorna um período amplo para mostrar todos os eventos
@@ -15,6 +20,7 @@ function defaultRanges() {
 }
 
 export default function EventsPage() {
+  const router = useRouter()
   const toast = useToast()
   const [events, setEvents] = useState<EventDTO[]>([])
   const [loading, setLoading] = useState(false)
@@ -23,6 +29,20 @@ export default function EventsPage() {
   const [filter, setFilter] = useState<{from:string; to:string; category?: EventDTO['category']}>(
     defaultRanges()
   )
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean
+    eventId: string
+    eventTitle: string
+    isRecurring: boolean
+    seriesCount: number
+  }>({
+    isOpen: false,
+    eventId: '',
+    eventTitle: '',
+    isRecurring: false,
+    seriesCount: 0
+  })
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -82,17 +102,81 @@ export default function EventsPage() {
     setFilter(f => ({ ...f, from, to }))
   }
 
-  async function onDelete(id: string) {
+  async function onDeleteClick(event: EventDTO) {
     try {
-      console.log('Tentando excluir evento:', id)
-      await deleteEvent(id)
-      console.log('Evento excluído com sucesso')
-      toast.show({ type: 'success', title: 'Excluído', message: 'Evento removido' })
-      setEvents((prev) => prev.filter(e => e.id !== id))
+      const recurrenceInfo = await getEventRecurrenceInfo(event.id)
+      setDeleteModal({
+        isOpen: true,
+        eventId: event.id,
+        eventTitle: event.title,
+        isRecurring: recurrenceInfo.isRecurring,
+        seriesCount: recurrenceInfo.seriesCount || 1
+      })
+    } catch (error) {
+      // Se falhar ao buscar info de recorrência, assume que não é recorrente
+      setDeleteModal({
+        isOpen: true,
+        eventId: event.id,
+        eventTitle: event.title,
+        isRecurring: false,
+        seriesCount: 1
+      })
+    }
+  }
+
+    async function onDeleteConfirm(deleteSeries: boolean) {
+    try {
+      await deleteEvent(deleteModal.eventId, deleteSeries)
+      toast.show({ 
+        type: 'success', 
+        title: 'Excluído', 
+        message: deleteSeries ? 'Série de eventos removida' : 'Evento removido'
+      })
+      
+      // Fechar modal e recarregar lista
+      setDeleteModal({ isOpen: false, eventId: '', eventTitle: '', isRecurring: false, seriesCount: 0 })
+      await load()
     } catch (error) {
       console.error('Erro ao excluir evento:', error)
-      toast.show({ type: 'danger', title: 'Erro', message: 'Falha ao excluir evento. Verifique sua conexão.' })
+      toast.show({ 
+        type: 'danger', 
+        title: 'Erro', 
+        message: 'Falha ao excluir evento. Verifique sua conexão.' 
+      })
     }
+  }
+
+  function handleEventClick(event: EventDTO) {
+    // Verificar se o usuário tem permissão para editar
+    if (!canEditEvent(event)) {
+      // Se não pode editar, apenas visualizar
+      if (isEventVirtual(event)) {
+        const parsed = parseVirtualEventId(event.id)
+        if (parsed.parentId) {
+          router.push(`/app/events/${parsed.parentId}`)
+          return
+        }
+      }
+      router.push(`/app/events/${event.id}`)
+      return
+    }
+    
+    // Se pode editar, ir direto para a edição
+    if (isEventVirtual(event)) {
+      const parsed = parseVirtualEventId(event.id)
+      if (parsed.parentId) {
+        router.push(`/app/events/${parsed.parentId}/edit`)
+        return
+      }
+    }
+    
+    // Evento normal
+    router.push(`/app/events/${event.id}/edit`)
+  }
+
+  function handleEditClick(event: EventDTO, e: React.MouseEvent) {
+    e.stopPropagation() // Prevenir propagação do clique do card
+    handleEventClick(event)
   }
 
   const fromLocal = useMemo(() => new Date(filter.from).toISOString().slice(0,16), [filter.from])
@@ -286,7 +370,23 @@ export default function EventsPage() {
           <div className="row">
             {events.map(ev => (
               <div key={ev.id} className="col-12 mb-3">
-                <div className={`card border-start border-4 border-${getCategoryColor(ev.category)} shadow-sm`}>
+                <div 
+                  className={`card border-start border-4 border-${getCategoryColor(ev.category)} shadow-sm ${canEditEvent(ev) ? 'cursor-pointer' : ''}`}
+                  onClick={canEditEvent(ev) ? () => handleEventClick(ev) : undefined}
+                  style={{ 
+                    cursor: canEditEvent(ev) ? 'pointer' : 'default', 
+                    transition: 'transform 0.2s, box-shadow 0.2s',
+                    opacity: canEditEvent(ev) ? 1 : 0.8
+                  }}
+                  onMouseEnter={canEditEvent(ev) ? (e) => {
+                    e.currentTarget.style.transform = 'translateY(-1px)'
+                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.12)'
+                  } : undefined}
+                  onMouseLeave={canEditEvent(ev) ? (e) => {
+                    e.currentTarget.style.transform = 'translateY(0)'
+                    e.currentTarget.style.boxShadow = ''
+                  } : undefined}
+                >
                   <div className="card-body">
                     <div className="row align-items-center">
                       <div className="col-md-8">
@@ -295,6 +395,15 @@ export default function EventsPage() {
                           <span className={`badge bg-${getCategoryColor(ev.category)} rounded-pill`}>
                             {getCategoryLabel(ev.category)}
                           </span>
+                          <RecurrenceBadge 
+                            recurrence={ev.recurrence} 
+                            className="badge-sm"
+                          />
+                          {isEventVirtual(ev) && (
+                            <span className="badge bg-info" title="Evento recorrente">
+                              <i className="fas fa-sync-alt"></i>
+                            </span>
+                          )}
                         </div>
                         
                         <div className="row text-muted small mb-2">
@@ -325,27 +434,52 @@ export default function EventsPage() {
                       </div>
                       
                       <div className="col-md-4 text-md-end mt-3 mt-md-0">
-                        <div className="d-flex gap-2 justify-content-md-end">
-                          <a 
-                            href={`/app/events/${ev.id}/edit`}
-                            className="btn btn-sm btn-warning d-flex align-items-center"
-                            title="Editar evento"
-                          >
-                            <i className="fas fa-edit me-1"></i>
-                            <span className="d-none d-md-inline">Editar</span>
-                          </a>
-                          <button 
-                            className="btn btn-sm btn-danger d-flex align-items-center"
-                            onClick={() => {
-                              if (confirm(`Tem certeza que deseja excluir o evento "${ev.title}"?\n\nEsta ação não pode ser desfeita.`)) {
-                                onDelete(ev.id)
-                              }
-                            }}
-                            title="Excluir evento"
-                          >
-                            <i className="fas fa-trash me-1"></i>
-                            <span className="d-none d-md-inline">Excluir</span>
-                          </button>
+                        <div className="d-flex gap-2 justify-content-md-end align-items-center">
+                          {/* Mostrar papel do usuário se não for dono */}
+                          {getUserRoleInEvent(ev) !== 'OWNER' && (
+                            <small className="text-muted me-2">
+                              {getUserRoleInEvent(ev) === 'EDITOR' ? (
+                                <span className="badge bg-primary">Editor</span>
+                              ) : getUserRoleInEvent(ev) === 'VIEWER' ? (
+                                <span className="badge bg-secondary">Visualizador</span>
+                              ) : null}
+                            </small>
+                          )}
+                          
+                          {/* Botão de editar - apenas se tiver permissão */}
+                          {canEditEvent(ev) && (
+                            <button 
+                              onClick={(e) => handleEditClick(ev, e)}
+                              className="btn btn-sm btn-warning d-flex align-items-center"
+                              title="Editar evento"
+                            >
+                              <i className="fas fa-edit me-1"></i>
+                              <span className="d-none d-md-inline">Editar</span>
+                            </button>
+                          )}
+                          
+                          {/* Botão de excluir - apenas se tiver permissão */}
+                          {canDeleteEvent(ev) && (
+                            <button 
+                              className="btn btn-sm btn-danger d-flex align-items-center"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onDeleteClick(ev)
+                              }}
+                              title="Excluir evento"
+                            >
+                              <i className="fas fa-trash me-1"></i>
+                              <span className="d-none d-md-inline">Excluir</span>
+                            </button>
+                          )}
+                          
+                          {/* Se não tiver nenhuma ação, mostrar apenas visualizar */}
+                          {!canEditEvent(ev) && !canDeleteEvent(ev) && (
+                            <small className="text-muted">
+                              <i className="fas fa-eye me-1"></i>
+                              Apenas visualização
+                            </small>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -356,6 +490,16 @@ export default function EventsPage() {
           </div>
         )}
       </div>
+
+      <DeleteEventModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, eventId: '', eventTitle: '', isRecurring: false, seriesCount: 0 })}
+        onConfirm={onDeleteConfirm}
+        eventTitle={deleteModal.eventTitle}
+        isRecurring={deleteModal.isRecurring}
+        seriesCount={deleteModal.seriesCount}
+        isLoading={deleteLoading}
+      />
     </main>
   )
 }

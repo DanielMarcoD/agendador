@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useToast } from '../../../../components/ToastProvider'
 import { getEvent, deleteEvent, EventDTO } from '../../../../lib/eventsApi'
 import { getCategoryLabel, getCategoryColor, formatEventDateTime } from '../../../../lib/dateUtils'
+import { canEditEvent, canDeleteEvent, getUserRoleInEvent } from '../../../../lib/eventPermissions'
 
 export default function EventDetailsPage() {
   const params = useParams()
@@ -102,31 +103,57 @@ export default function EventDetailsPage() {
           </a>
           <span className="navbar-brand mb-0">Detalhes do Evento</span>
         </div>
-        <div className="d-flex gap-2">
-          <a 
-            href={`/app/events/${event.id}/edit`}
-            className="btn btn-sm btn-primary"
-          >
-            <i className="fas fa-edit me-1"></i>
-            Editar
-          </a>
-          <button 
-            className="btn btn-sm btn-danger"
-            onClick={handleDelete}
-            disabled={deleting}
-          >
-            {deleting ? (
-              <>
-                <span className="spinner-border spinner-border-sm me-1" role="status"></span>
-                Excluindo...
-              </>
-            ) : (
-              <>
-                <i className="fas fa-trash me-1"></i>
-                Excluir
-              </>
-            )}
-          </button>
+        <div className="d-flex gap-2 align-items-center">
+          {/* Mostrar papel do usuário se não for dono */}
+          {getUserRoleInEvent(event) !== 'OWNER' && (
+            <span className="me-2">
+              {getUserRoleInEvent(event) === 'EDITOR' ? (
+                <span className="badge bg-primary">Editor</span>
+              ) : getUserRoleInEvent(event) === 'VIEWER' ? (
+                <span className="badge bg-secondary">Visualizador</span>
+              ) : null}
+            </span>
+          )}
+          
+          {/* Botão de editar - apenas se tiver permissão */}
+          {canEditEvent(event) && (
+            <a 
+              href={`/app/events/${event.id}/edit`}
+              className="btn btn-sm btn-primary"
+            >
+              <i className="fas fa-edit me-1"></i>
+              Editar
+            </a>
+          )}
+          
+          {/* Botão de excluir - apenas se tiver permissão */}
+          {canDeleteEvent(event) && (
+            <button 
+              className="btn btn-sm btn-danger"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <>
+                  <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                  Excluindo...
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-trash me-1"></i>
+                  Excluir
+                </>
+              )}
+            </button>
+          )}
+          
+          {/* Se não tiver nenhuma ação, mostrar apenas que é somente leitura */}
+          {!canEditEvent(event) && !canDeleteEvent(event) && (
+            <small className="text-muted">
+              <i className="fas fa-eye me-1"></i>
+              Apenas visualização
+            </small>
+          )}
         </div>
       </nav>
 
