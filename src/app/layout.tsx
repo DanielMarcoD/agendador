@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.scss'
+import '../styles/datepicker.css'
 import { ToastProvider } from '@/components/ToastProvider'
+import { TokenManager } from '@/components/TokenManager'
 
 export const metadata: Metadata = {
   title: 'Agendador',
@@ -11,7 +13,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body>
-        <ToastProvider>{children}</ToastProvider>
+        <TokenManager>
+          <ToastProvider>{children}</ToastProvider>
+        </TokenManager>
       </body>
     </html>
   )

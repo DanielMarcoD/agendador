@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { API_URL, api, ApiError } from '@/lib/api'
 import { encryptLoginData } from '@/lib/crypto'
-import { setToken } from '@/lib/token'
+import { setTokens } from '@/lib/token'
 import { useToast } from '@/components/ToastProvider'
 import { getErrorInfo, SUCCESS_MESSAGES } from '@/lib/errors'
 
@@ -25,7 +25,7 @@ export default function LoginPage() {
     try {
       const { emailEnc, passwordEnc, kid } = await encryptLoginData(API_URL, data.email, data.password)
       const res = await api('/auth/login', { method: 'POST', body: JSON.stringify({ emailEnc, passwordEnc, kid }) })
-      setToken(res.accessToken)
+      setTokens(res.accessToken, res.refreshToken)
       
       const successMessage = SUCCESS_MESSAGES.LOGIN(res.user?.name)
       toast.show({ type: 'success', ...successMessage })
