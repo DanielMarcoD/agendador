@@ -5,14 +5,12 @@ import { RecurrenceType } from '@/lib/eventsApi'
 interface RecurrenceBadgeProps {
   recurrence: RecurrenceType
   isParent?: boolean
-  seriesCount?: number
   className?: string
 }
 
 export default function RecurrenceBadge({ 
   recurrence, 
   isParent = false, 
-  seriesCount, 
   className = '' 
 }: RecurrenceBadgeProps) {
   if (recurrence === 'NONE') return null
@@ -36,9 +34,6 @@ export default function RecurrenceBadge({
     <span className={`badge ${info.color} ${className}`}>
       <span className="me-1">{info.icon}</span>
       {info.label}
-      {isParent && seriesCount && (
-        <span className="ms-1">({seriesCount})</span>
-      )}
     </span>
   )
 }

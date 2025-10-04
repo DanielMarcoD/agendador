@@ -256,13 +256,12 @@ export default function EditEventPage() {
                       <RecurrenceBadge 
                         recurrence={currentEvent?.recurrence || 'NONE'} 
                         isParent={recurrenceInfo.isParent}
-                        seriesCount={recurrenceInfo.seriesCount}
                       />
                     </div>
                     <p className="mb-2">
                       {recurrenceInfo.isParent 
-                        ? `Este é o evento principal de uma série com ${recurrenceInfo.seriesCount} eventos.`
-                        : `Este evento faz parte de uma série recorrente com ${recurrenceInfo.seriesCount} eventos.`
+                        ? "Este é o evento principal de uma série recorrente."
+                        : "Este evento faz parte de uma série recorrente."
                       }
                     </p>
                     {recurrenceInfo.isParent && (

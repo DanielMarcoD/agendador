@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface DeleteEventModalProps {
   isOpen: boolean
@@ -10,6 +10,7 @@ interface DeleteEventModalProps {
   isRecurring: boolean
   seriesCount?: number
   isLoading?: boolean
+  isVirtual?: boolean
 }
 
 export default function DeleteEventModal({
@@ -19,9 +20,17 @@ export default function DeleteEventModal({
   eventTitle,
   isRecurring,
   seriesCount = 0,
-  isLoading = false
+  isLoading = false,
+  isVirtual = false
 }: DeleteEventModalProps) {
   const [deleteSeries, setDeleteSeries] = useState(false)
+
+  // Resetar estado quando o modal abrir/fechar
+  useEffect(() => {
+    if (isOpen) {
+      setDeleteSeries(false)
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -51,7 +60,7 @@ export default function DeleteEventModal({
               <div className="mt-3">
                 <div className="alert alert-info">
                   <i className="fas fa-info-circle me-2"></i>
-                  Este evento faz parte de uma série recorrente com {seriesCount} eventos.
+                  Este evento faz parte de uma série recorrente.
                 </div>
                 
                 <div className="form-check">
@@ -64,7 +73,10 @@ export default function DeleteEventModal({
                     onChange={() => setDeleteSeries(false)}
                   />
                   <label className="form-check-label" htmlFor="deleteOne">
-                    Excluir apenas este evento
+                    {isVirtual 
+                      ? 'Excluir apenas esta ocorrência'
+                      : 'Excluir apenas este evento'
+                    }
                   </label>
                 </div>
                 
@@ -79,7 +91,7 @@ export default function DeleteEventModal({
                   />
                   <label className="form-check-label" htmlFor="deleteSeries">
                     <span className="text-danger">
-                      Excluir toda a série recorrente ({seriesCount} eventos)
+                      Excluir toda a série recorrente
                     </span>
                   </label>
                 </div>
@@ -108,7 +120,9 @@ export default function DeleteEventModal({
                   Excluindo...
                 </>
               ) : (
-                deleteSeries ? 'Excluir Série' : 'Excluir Evento'
+                deleteSeries 
+                  ? 'Excluir Série Completa' 
+                  : (isVirtual ? 'Excluir Esta Ocorrência' : 'Excluir Evento')
               )}
             </button>
           </div>

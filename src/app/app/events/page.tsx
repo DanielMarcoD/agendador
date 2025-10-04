@@ -104,21 +104,26 @@ export default function EventsPage() {
 
   async function onDeleteClick(event: EventDTO) {
     try {
+      // Verificar se é evento virtual (contém hífen no final)
+      const isVirtual = event.id.includes('-') && /\d+$/.test(event.id)
+      
       const recurrenceInfo = await getEventRecurrenceInfo(event.id)
       setDeleteModal({
         isOpen: true,
         eventId: event.id,
         eventTitle: event.title,
-        isRecurring: recurrenceInfo.isRecurring,
+        isRecurring: recurrenceInfo.isRecurring || isVirtual,
         seriesCount: recurrenceInfo.seriesCount || 1
       })
     } catch (error) {
-      // Se falhar ao buscar info de recorrência, assume que não é recorrente
+      // Verificar se é evento virtual mesmo se a API falhar
+      const isVirtual = event.id.includes('-') && /\d+$/.test(event.id)
+      
       setDeleteModal({
         isOpen: true,
         eventId: event.id,
         eventTitle: event.title,
-        isRecurring: false,
+        isRecurring: isVirtual, // Se é virtual, é recorrente
         seriesCount: 1
       })
     }
@@ -499,6 +504,7 @@ export default function EventsPage() {
         isRecurring={deleteModal.isRecurring}
         seriesCount={deleteModal.seriesCount}
         isLoading={deleteLoading}
+        isVirtual={deleteModal.eventId.includes('-') && /\d+$/.test(deleteModal.eventId)}
       />
     </main>
   )
